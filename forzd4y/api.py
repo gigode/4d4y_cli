@@ -26,9 +26,9 @@ class ForumApi:
     # HTTP headers mimicking a browser
     DEFAULT_HEADERS = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
     }
@@ -74,12 +74,13 @@ class ForumApi:
             **kwargs: Additional arguments passed to requests
 
         Returns:
-            Response text content
+            Response text content (decoded as GBK for 4d4y forum)
         """
         try:
             response = self.session.get(url, params=params, **kwargs)
             response.raise_for_status()
-            return response.text
+            # 4d4y forum uses GBK encoding - decode explicitly
+            return response.content.decode('gbk', errors='replace')
         except requests.RequestException as e:
             raise ApiError(f"GET request failed: {e}")
 
@@ -398,13 +399,25 @@ class ForumApi:
             Dictionary with thread info or None
         """
         try:
-            # Find thread title link
-            title_link = row.find("a", class_="s xst")
-            if not title_link:
-                title_link = row.find("a", href=re.compile(r"viewthread\.php\?tid=\d+"))
+            # Find all viewthread links - they all have same tid but different text
+            # The second link with actual title text is the title link
+            viewthread_links = row.find_all("a", href=re.compile(r"viewthread\.php\?tid=\d+"))
 
-            if not title_link:
+            if not viewthread_links:
                 return None
+
+            # Find the link that has actual title text (not just a number)
+            title_link = None
+            for link in viewthread_links:
+                text = link.get_text(strip=True)
+                # Skip if it's just a page number or icon
+                if text and not text.isdigit() and len(text) > 1:
+                    title_link = link
+                    break
+
+            # Fallback to first link if no better match
+            if not title_link:
+                title_link = viewthread_links[0]
 
             href = title_link.get("href", "")
             tid_match = re.search(r"tid=(\d+)", href)
@@ -431,8 +444,9 @@ class ForumApi:
             if last_post_link:
                 last_post = last_post_link.get_text(strip=True)
 
-            # Extract thread title
+            # Extract thread title (decode HTML entities)
             title = title_link.get_text(strip=True)
+            title = title.replace("&amp;", "&").replace("&quot;", '"').replace("&lt;", "<").replace("&gt;", ">")
 
             return {
                 "tid": tid,

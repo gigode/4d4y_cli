@@ -24,7 +24,10 @@
       "Bash(git config:*)",
       "Bash(git init:*)",
       "Bash(git add:*)",
-      "Bash(git commit -m 'Initial commit: 4d4y CLI BBS-style forum client:*)"
+      "Bash(git commit -m 'Initial commit: 4d4y CLI BBS-style forum client:*)",
+      "mcp__iflow-github__create_repository",
+      "Bash(brew install:*)",
+      "Bash(gh repo:*)"
     ]
   },
   "enabledMcpjsonServers": [
