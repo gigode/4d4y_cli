@@ -56,7 +56,6 @@ class Config:
         self.config_dir = config_dir or self.DEFAULT_CONFIG_DIR
         self.config_path = os.path.join(self.config_dir, self.DEFAULT_CONFIG_FILE)
         self.cookies_path = os.path.join(self.config_dir, self.DEFAULT_COOKIES_FILE)
-        self._ensure_config_dir()
         self._config = self._load_config()
 
     def _ensure_config_dir(self):
@@ -86,6 +85,7 @@ class Config:
     def save_config(self):
         """Save current configuration to file."""
         try:
+            self._ensure_config_dir()
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(self._config, f, indent=2, ensure_ascii=False)
         except IOError as e:
@@ -99,6 +99,7 @@ class Config:
             cookies_dict: Dictionary of cookie name -> value
         """
         try:
+            self._ensure_config_dir()
             with open(self.cookies_path, "w", encoding="utf-8") as f:
                 json.dump(cookies_dict, f, indent=2)
         except IOError as e:

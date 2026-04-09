@@ -65,18 +65,25 @@ class TerminalUI:
     # Screen width
     DEFAULT_WIDTH = 80
 
-    def __init__(self, width=None):
+    DEFAULT_HEIGHT = 24
+
+    def __init__(self, width=None, height=None):
         """
         Initialize terminal UI.
 
         Args:
             width: Terminal width (defaults to detected or 80)
+            height: Terminal height (defaults to detected or 24)
         """
         try:
-            self.width = os.get_terminal_size().columns
+            terminal_size = os.get_terminal_size()
+            self.width = terminal_size.columns
+            self.height = terminal_size.lines
         except OSError:
             self.width = width or self.DEFAULT_WIDTH
+            self.height = height or self.DEFAULT_HEIGHT
         self.width = min(self.width, 120)  # Cap max width
+        self.height = max(self.height, self.DEFAULT_HEIGHT)
 
     def clear_screen(self):
         """Clear the terminal screen."""
@@ -259,7 +266,7 @@ class TerminalUI:
         # Footer
         print(self.dim("─" * self.width))
         page_info = f"第 {page}/{total_pages} 页, 当前第 {selected_idx + 1} 条"
-        nav_hint = "[↑/↓]选择 [Enter]查看 [R]回复 [B]返回 [Q]退出"
+        nav_hint = "[J/K/↑/↓]选择 [H/L]翻页 [Enter]查看 [数字+Enter]直达 [R]刷新 [B]返回 [Q]退出"
         print(f"  {self.dim(page_info):<30} {self.dim(nav_hint):>{self.width - 34}}")
         print()
 
@@ -314,7 +321,7 @@ class TerminalUI:
         print(f"  {self.dim(page_info):<20} {self.dim(nav_hint):>{self.width - 24}}")
         print()
 
-    def print_thread_posts(self, posts: List[Dict], thread_title: str, page: int = 1, total_pages: int = 1):
+    def print_thread_posts(self, posts: List[Dict], thread_title: str, page: int = 1, total_pages: int = 1, selected_idx: int = 0):
         """
         Print multiple posts for a thread page.
 
@@ -323,6 +330,7 @@ class TerminalUI:
             thread_title: Thread title
             page: Current page
             total_pages: Total pages
+            selected_idx: Currently selected post index on the page
         """
         print()
         print(self.bold(f"{'─' * self.width}"))
@@ -330,19 +338,39 @@ class TerminalUI:
         print(self.bold(f"{'─' * self.width}"))
 
         for idx, post in enumerate(posts):
+            pointer = self.green("▶ ") if idx == selected_idx else "  "
+
+            if post.get("type") == "image":
+                image_url = post.get("image_url", "")
+                image_label = post.get("image_label", "图片")
+                preview = image_url if len(image_url) <= self.width - 12 else image_url[:self.width - 15] + "..."
+                print()
+                print(self.yellow(f"{pointer}[图] {image_label}"))
+                print(f"  {self.dim('│')} {self.cyan(preview)}")
+                continue
+
             floor = post.get("floor", (page - 1) * 20 + idx + 1)
             author = post.get("author", "匿名")
             post_time = post.get("post_time", "")
-            uid = post.get("uid", "")
-            content = post.get("content", "")
+            content_lines = post.get("display_lines")
+            if content_lines is None:
+                content = post.get("content", "")
+                content_lines = self._word_wrap(content, self.width - 8) if content else ["(无内容)"]
+            continuation = ""
+            if post.get("continued_before") or post.get("continued_after"):
+                markers = []
+                if post.get("continued_before"):
+                    markers.append("续上")
+                if post.get("continued_after"):
+                    markers.append("未完")
+                continuation = f" {self.dim('[' + '/'.join(markers) + ']')}"
 
             # Post header
             print()
-            print(self.cyan(f"  ┌─ {self.green(author)} {self.dim(post_time)} #{(page-1)*20 + idx + 1}"))
+            print(self.cyan(f"{pointer}┌─ {self.green(author)} {self.dim(post_time)} #{floor}{continuation}"))
 
             # Post content with padding
-            if content:
-                content_lines = self._word_wrap(content, self.width - 8)
+            if content_lines:
                 for line in content_lines:
                     print(f"  {self.dim('│')} {line}")
             else:
@@ -352,7 +380,7 @@ class TerminalUI:
 
         print()
         page_info = f"第 {page}/{total_pages} 页"
-        nav_hint = "[J/K]翻页 [R]回复 [Q]返回论坛 [H]首页"
+        nav_hint = "[J/K/↑/↓]选择 [Enter]打开图片 [H/L]翻页 [数字+Enter]跳页 [R]刷新 [B]返回 [Q]退出"
         print(f"  {self.dim(page_info):<20} {self.dim(nav_hint):>{self.width - 24}}")
         print()
 
@@ -433,7 +461,7 @@ class TerminalUI:
 
         print()
         print(self.dim("─" * self.width))
-        print(f"  {self.dim('[Enter]进入板块 [Q]退出 [L]登录/注销')}")
+        print(f"  {self.dim('[Enter]进入板块 [B]返回 [Q]退出 [L]登录/注销')}")
         print()
 
     def print_login(self):
@@ -467,7 +495,7 @@ class TerminalUI:
         print(self.bold(self._center_text("4D4Y Forum CLI 客户端", self.width)))
         print(self.bold(self._center_text("仿 BBS 风格的终端论坛浏览工具", self.width)))
         print()
-        print(self.dim(self._center_text(f"版本 0.1.0 | 访问 https://www.4d4y.com/forum/", self.width)))
+        print(self.dim(self._center_text(f"版本 1.0.0 | 访问 https://www.4d4y.com/forum/", self.width)))
         print()
         print(self.bold(f"{Colors.CYAN}{'#' * self.width}"))
         print()

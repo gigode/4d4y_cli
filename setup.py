@@ -15,7 +15,7 @@ if readme_file.exists():
 
 setup(
     name="4d4y_cli",
-    version="0.1.0",
+    version="1.0.0",
     author="4d4y_cli contributors",
     author_email="",
     description="A BBS-style CLI client for 4d4y forum",
@@ -24,7 +24,7 @@ setup(
     url="https://github.com/GreenSkinMonster/4d4y_cli",
     packages=find_packages(),
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 5 - Production/Stable",
         "Environment :: Console",
         "Intended Audience :: End Users/Desktop",
         "License :: OSI Approved :: MIT License",

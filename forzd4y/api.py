@@ -7,7 +7,7 @@ Handles HTTP requests, session management, and forum interactions.
 import re
 import hashlib
 import time
-from urllib.parse import urlencode, urljoin
+from urllib.parse import urlencode, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -428,14 +428,7 @@ class ForumApi:
             author = author_link.get_text(strip=True) if author_link else "匿名"
 
             # Extract reply count and view count
-            reply_count = 0
-            view_count = 0
-            stats = row.find_all("td", class_="num")
-            if len(stats) >= 2:
-                reply_text = stats[0].get_text(strip=True)
-                view_text = stats[1].get_text(strip=True)
-                reply_count = int(reply_text) if reply_text.isdigit() else 0
-                view_count = int(view_text) if view_text.isdigit() else 0
+            reply_count, view_count = self._extract_thread_stats(row)
 
             # Extract last post info
             last_post = ""
@@ -459,6 +452,31 @@ class ForumApi:
             }
         except Exception:
             return None
+
+    def _extract_thread_stats(self, row):
+        """
+        Extract reply/view counts from a thread row.
+
+        Discuz-derived forums often render stats either as two `td.num`
+        cells or as a single `td.num` containing both values.
+        """
+        stats_candidates = row.find_all("td", class_=re.compile(r"(^|\s)nums?(\s|$)"))
+        number_tokens = []
+
+        for cell in stats_candidates:
+            for text in cell.stripped_strings:
+                number_tokens.extend(re.findall(r"\d+", text.replace(",", "")))
+
+        if len(number_tokens) >= 2:
+            return int(number_tokens[0]), int(number_tokens[1])
+
+        if len(stats_candidates) == 1:
+            combined_text = " ".join(stats_candidates[0].stripped_strings)
+            combined_numbers = re.findall(r"\d+", combined_text.replace(",", ""))
+            if len(combined_numbers) >= 2:
+                return int(combined_numbers[0]), int(combined_numbers[1])
+
+        return 0, 0
 
     def get_thread_detail(self, tid, page=1):
         """
@@ -577,8 +595,10 @@ class ForumApi:
 
             # Extract post content - look in td.t_msgfont
             content = ""
+            images = []
             content_elem = container.find("td", class_="t_msgfont")
             if content_elem:
+                images = self._extract_post_images(content_elem)
                 content = self._clean_post_content(content_elem)
 
             # Fallback: try td.postcontent for simple posts
@@ -605,11 +625,35 @@ class ForumApi:
                 "author": author,
                 "uid": uid,
                 "content": content,
+                "images": images,
                 "post_time": post_time,
                 "floor": floor,
             }
         except Exception as e:
             return None
+
+    def _extract_post_images(self, elem):
+        """Extract image URLs from a post content block."""
+        images = []
+        seen = set()
+
+        for img in elem.find_all("img"):
+            src = img.get("file") or img.get("src") or img.get("zoomfile")
+            if not src:
+                continue
+            image_url = urljoin(self.config.BASE_URL, src)
+            image_path = urlparse(image_url).path.lower()
+            if not image_path.endswith((".jpg", ".jpeg")):
+                continue
+            if image_url in seen:
+                continue
+            seen.add(image_url)
+            images.append({
+                "url": image_url,
+                "alt": img.get("alt", "").strip(),
+            })
+
+        return images
 
     def _clean_post_content(self, elem):
         """
@@ -625,12 +669,9 @@ class ForumApi:
         # Clone element to avoid modifying original
         elem = elem.__copy__()
 
-        # Remove images but keep alt text or link
+        # Remove images. They are rendered as separate selectable items.
         for img in elem.find_all("img"):
-            alt = img.get("alt", "")
-            if alt:
-                alt = f"[{alt}]"
-            img.replace_with(BeautifulSoup(alt or "", "html.parser"))
+            img.decompose()
 
         # Remove video/audio embeds
         for embed in elem.find_all(["video", "audio", "flash"]):

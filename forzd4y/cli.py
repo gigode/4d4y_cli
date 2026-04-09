@@ -6,9 +6,14 @@ A BBS-style terminal client for browsing 4d4y forum.
 """
 
 import sys
+import math
 import getpass
+import os
+import shutil
+import subprocess
 import tty
 import termios
+import webbrowser
 from pathlib import Path
 
 # Add package to path for development
@@ -23,7 +28,7 @@ def get_key():
     """
     Get a single keypress including arrow keys.
     Returns:
-        'up', 'down', 'enter', 'quit', or single character
+        'up', 'down', 'enter', 'quit', 'backspace', or single character
     """
     import sys
     # Check if stdin is a tty (interactive terminal)
@@ -45,6 +50,8 @@ def get_key():
                     return 'enter'
                 elif ch == '\n':
                     return 'enter'
+                elif ch in ('\x7f', '\b'):
+                    return 'backspace'
                 elif ch == 'q' or ch == 'Q':
                     return 'quit'
                 elif ch == 'j' or ch == 'J':
@@ -73,16 +80,167 @@ def get_key():
 
 class BBSClient:
     """Main BBS client application."""
+    THREADS_PER_PAGE = 20
+    THREAD_VIEW_LINES = 20
+    THREAD_VIEW_RESERVED_LINES = 8
 
-    def __init__(self):
+    def __init__(self, config=None, api=None, ui=None):
         """Initialize the BBS client."""
-        self.config = Config()
-        self.api = ForumApi(self.config)
-        self.ui = TerminalUI()
+        self.config = config or Config()
+        self.api = api or ForumApi(self.config)
+        self.ui = ui or TerminalUI()
         self.current_fid = None
         self.current_tid = None
         self.current_page = 1
         self.logged_in = False
+
+    def _normalize_key(self, key):
+        """Normalize raw key names into command tokens."""
+        if key == "quit":
+            return "q"
+        if isinstance(key, str) and len(key) == 1:
+            return key.lower()
+        return key
+
+    def _read_command(self, prompt, direct_keys=None, allow_digits=False):
+        """
+        Read a command from terminal.
+
+        Direct letter commands execute immediately.
+        Numeric input is buffered and submitted on Enter.
+        """
+        direct_keys = set(direct_keys or [])
+
+        if not sys.stdin.isatty():
+            command = get_input(prompt).strip().lower()
+            return command or "enter"
+
+        buffer = ""
+        print(prompt, end="", flush=True)
+
+        while True:
+            key = self._normalize_key(get_key())
+
+            if key == "enter":
+                print()
+                return buffer or "enter"
+
+            if key == "backspace":
+                buffer = buffer[:-1]
+            elif allow_digits and isinstance(key, str) and key.isdigit():
+                buffer += key
+            elif key in direct_keys:
+                print()
+                return key
+
+            self.ui.clear_line()
+            print(f"{prompt}{buffer}", end="", flush=True)
+
+    def _open_url(self, url):
+        """Open a URL in the system browser without polluting the terminal."""
+        opener = shutil.which("xdg-open")
+        if opener:
+            subprocess.Popen(
+                [opener, url],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+                close_fds=True,
+                env={**os.environ, "BROWSER": os.environ.get("BROWSER", "")},
+            )
+            return True
+
+        return webbrowser.open(url)
+
+    def _get_post_content_lines(self, post):
+        """Return wrapped content lines for a post."""
+        content = post.get("content", "")
+        return self.ui._word_wrap(content, self.ui.width - 8) if content else ["(无内容)"]
+
+    def _paginate_thread_posts(self, posts):
+        """Paginate posts by visible screen height and content-line budget."""
+        max_content_lines = self.THREAD_VIEW_LINES
+        max_rendered_lines = max(1, self.ui.height - self.THREAD_VIEW_RESERVED_LINES)
+        pages = []
+        current_page = []
+        current_content_lines = 0
+        current_rendered_lines = 0
+
+        for post in posts:
+            wrapped_lines = self._get_post_content_lines(post)
+            offset = 0
+
+            while offset < len(wrapped_lines):
+                available_content = max_content_lines - current_content_lines
+                available_rendered = max_rendered_lines - current_rendered_lines - 3
+
+                if available_content <= 0 or available_rendered <= 0:
+                    pages.append(current_page)
+                    current_page = []
+                    current_content_lines = 0
+                    current_rendered_lines = 0
+                    continue
+
+                chunk_size = min(len(wrapped_lines) - offset, available_content, available_rendered)
+                if chunk_size <= 0:
+                    chunk_size = 1
+
+                chunk = dict(post)
+                chunk["display_lines"] = wrapped_lines[offset:offset + chunk_size]
+                chunk["continued_before"] = offset > 0
+                chunk["continued_after"] = offset + chunk_size < len(wrapped_lines)
+                current_page.append(chunk)
+                current_content_lines += chunk_size
+                current_rendered_lines += chunk_size + 3
+                offset += chunk_size
+
+                if offset < len(wrapped_lines):
+                    pages.append(current_page)
+                    current_page = []
+                    current_content_lines = 0
+                    current_rendered_lines = 0
+
+            for image_index, image in enumerate(post.get("images", []), start=1):
+                if current_rendered_lines + 2 > max_rendered_lines:
+                    pages.append(current_page)
+                    current_page = []
+                    current_content_lines = 0
+                    current_rendered_lines = 0
+
+                current_page.append({
+                    "type": "image",
+                    "floor": post.get("floor"),
+                    "image_url": image.get("url"),
+                    "image_label": image.get("alt") or f"图片 {image_index}",
+                })
+                current_rendered_lines += 2
+
+        if current_page:
+            pages.append(current_page)
+
+        return pages or [[]]
+
+    def _load_thread_pages(self, tid):
+        """Load all server pages for a thread and build client-side view pages."""
+        all_posts = []
+        thread_title = None
+        server_page = 1
+
+        while True:
+            posts, total_server_pages, _, title = self.api.get_thread_detail(tid, server_page)
+            all_posts.extend(posts)
+            if title:
+                thread_title = title
+            if server_page >= total_server_pages:
+                break
+            server_page += 1
+
+        return self._paginate_thread_posts(all_posts), thread_title or "无标题"
+
+    def _invalidate_thread(self):
+        """Clear cached thread view state so the next render reloads data."""
+        return None
 
     def run(self):
         """Main application loop."""
@@ -102,7 +260,7 @@ class BBSClient:
         while True:
             try:
                 action = self._show_main_menu()
-                if action is None:
+                if action is False:
                     break
             except KeyboardInterrupt:
                 self.ui.print_message("按 Q 退出")
@@ -156,9 +314,12 @@ class BBSClient:
         if key in ('quit', 'q', 'Q'):
             return False
         elif key == '1':
-            self._browse_forums()
+            if self._browse_forums() is False:
+                return False
         elif key == '2':
-            self._enter_forum(2)  # Discovery fid
+            result = self._enter_forum(2)  # Discovery fid
+            if result is False:
+                return False
         elif key == '3':
             self._search_posts()
         elif key in ('l', 'L'):
@@ -206,19 +367,26 @@ class BBSClient:
         """Browse and select a forum."""
         try:
             forums = self.api.get_forum_list()
-            self.ui.print_forum_list(forums)
+            while True:
+                self.ui.clear_screen()
+                self.ui.print_forum_list(forums)
+                command = self._read_command(
+                    "  输入板块编号后回车, [B]返回, [Q]退出: ",
+                    direct_keys={"b", "q"},
+                    allow_digits=True,
+                )
 
-            fid_input = get_input("  输入板块编号进入, 或按 Q 返回: ").strip()
+                if command == "q":
+                    return False
 
-            if fid_input.lower() == "q":
-                return
+                if command == "b":
+                    return
 
-            try:
-                fid = int(fid_input)
-                self._enter_forum(fid)
-            except ValueError:
-                self.ui.print_message("请输入有效的板块编号")
-                get_input("  按 Enter 继续...")
+                try:
+                    return self._enter_forum(int(command))
+                except ValueError:
+                    self.ui.print_message("请输入有效的板块编号")
+                    get_input("  按 Enter 继续...")
 
         except ApiError as e:
             self.ui.print_message(f"获取板块列表失败: {e}", is_error=True)
@@ -230,16 +398,30 @@ class BBSClient:
 
         Args:
             fid: Forum ID
+
+        Returns:
+            False to quit the application, True to return to caller
         """
         self.current_fid = fid
-        self.current_page = 1
+        forum_page = 1
         selected_idx = 0  # Currently selected thread index (0-based)
+        page_cache = {}
 
         while True:
             try:
-                threads, total_pages, _ = self.api.get_thread_list(fid, self.current_page)
+                if forum_page not in page_cache:
+                    page_cache[forum_page] = self.api.get_thread_list(fid, forum_page)
+
+                threads, total_pages, _ = page_cache[forum_page]
+                threads = threads[:self.THREADS_PER_PAGE]
 
                 if not threads:
+                    if forum_page > 1:
+                        page_cache.pop(forum_page, None)
+                        forum_page -= 1
+                        self.ui.print_message("已经是最后一页")
+                        get_input("  按 Enter 继续...")
+                        continue
                     self.ui.print_message("该板块暂无帖子")
                     break
 
@@ -250,44 +432,66 @@ class BBSClient:
                     selected_idx = 0
 
                 # Display thread list with cursor
-                self.ui.print_thread_list(threads, self.current_page, total_pages, fid, selected_idx)
+                self.ui.clear_screen()
+                self.ui.print_thread_list(threads, forum_page, total_pages, fid, selected_idx)
 
-                # Get key input
-                key = get_key()
+                key = self._read_command(
+                    "  命令 [J/K/↑/↓选择 H/L翻页 Enter查看 数字+Enter直达 R刷新 B返回 Q退出]: ",
+                    direct_keys={"b", "q", "r", "h", "l", "up", "down"},
+                    allow_digits=True,
+                )
 
-                if key == 'quit':
-                    break
+                if key == 'q':
+                    return False
                 elif key == 'b':
-                    break
+                    return True
                 elif key == 'up':
                     # Move cursor up
                     if selected_idx > 0:
                         selected_idx -= 1
+                    elif forum_page > 1:
+                        forum_page -= 1
+                        selected_idx = self.THREADS_PER_PAGE - 1
                 elif key == 'down':
                     # Move cursor down
                     if selected_idx < len(threads) - 1:
                         selected_idx += 1
+                    elif forum_page < total_pages:
+                        forum_page += 1
+                        selected_idx = 0
+                elif key == 'h':
+                    if forum_page > 1:
+                        forum_page -= 1
+                        selected_idx = 0
+                elif key == 'l':
+                    forum_page += 1
+                    selected_idx = 0
                 elif key == 'enter':
                     # Open selected thread
                     if threads:
-                        self._view_thread(threads[selected_idx])
-                elif key == 'r' or key == 'R':
-                    if self.logged_in:
-                        self.ui.print_message("正在回复帖子...")
-                    else:
-                        self.ui.print_message("请先登录再回复")
+                        result = self._view_thread(threads[selected_idx])
+                        if result is False:
+                            return False
+                elif key == "r":
+                    page_cache.pop(forum_page, None)
                 elif key.isdigit():
-                    # Jump to specific thread number
                     idx = int(key) - 1
                     if 0 <= idx < len(threads):
                         selected_idx = idx
-                        self._view_thread(threads[idx])
+                        result = self._view_thread(threads[idx])
+                        if result is False:
+                            return False
+                    else:
+                        self.ui.print_message("帖子编号超出当前页范围")
+                        get_input("  按 Enter 继续...")
 
             except ApiError as e:
                 self.ui.print_message(f"获取帖子列表失败: {e}", is_error=True)
-                break
+                return True
             except KeyboardInterrupt:
-                break
+                return True
+
+        return True
 
     def _view_thread(self, thread):
         """
@@ -295,50 +499,98 @@ class BBSClient:
 
         Args:
             thread: Thread dictionary
+
+        Returns:
+            False to quit the application, True to return to caller
         """
         self.current_tid = thread.get("tid")
-        self.current_page = 1
+        thread_page = 1
         thread_title = thread.get("title", "无标题")
+        selected_idx = 0
+        pages = None
 
         while True:
             try:
-                posts, total_pages, _, title = self.api.get_thread_detail(
-                    self.current_tid, self.current_page
+                if pages is None:
+                    pages, loaded_title = self._load_thread_pages(self.current_tid)
+                    if loaded_title:
+                        thread_title = loaded_title
+
+                total_pages = len(pages)
+                if thread_page > total_pages:
+                    thread_page = total_pages
+                posts = pages[thread_page - 1]
+                if posts:
+                    selected_idx = max(0, min(selected_idx, len(posts) - 1))
+                else:
+                    selected_idx = 0
+
+                self.ui.clear_screen()
+                self.ui.print_thread_posts(
+                    posts,
+                    thread_title,
+                    thread_page,
+                    total_pages,
+                    selected_idx=selected_idx,
                 )
 
-                # Use server-provided title if available
-                if title:
-                    thread_title = title
-
-                self.ui.print_thread_posts(posts, thread_title, self.current_page, total_pages)
-
-                cmd = get_input("  命令 [J/K翻页 R回复 Q返回]: ").strip().lower()
+                cmd = self._read_command(
+                    "  命令 [J/K/↑/↓选择 H/L翻页 R刷新 B返回 Q退出 数字+Enter跳页]: ",
+                    direct_keys={"j", "k", "r", "b", "q", "h", "l", "up", "down"},
+                    allow_digits=True,
+                )
 
                 if cmd == "q":
-                    break
-                elif cmd == "j":
-                    if self.current_page < total_pages:
-                        self.current_page += 1
-                elif cmd == "k":
-                    if self.current_page > 1:
-                        self.current_page -= 1
+                    return False
+                elif cmd == "b":
+                    return True
+                elif cmd == "enter":
+                    selected_item = posts[selected_idx] if posts else None
+                    if selected_item and selected_item.get("type") == "image":
+                        try:
+                            opened = self._open_url(selected_item.get("image_url"))
+                            if not opened:
+                                raise RuntimeError("系统未返回可用浏览器")
+                        except Exception as exc:
+                            self.ui.print_message(f"打开浏览器失败: {exc}", is_error=True)
+                            get_input("  按 Enter 继续...")
+                elif cmd in {"j", "down"}:
+                    if selected_idx < len(posts) - 1:
+                        selected_idx += 1
+                    elif thread_page < total_pages:
+                        thread_page += 1
+                        selected_idx = 0
+                elif cmd in {"k", "up"}:
+                    if selected_idx > 0:
+                        selected_idx -= 1
+                    elif thread_page > 1:
+                        thread_page -= 1
+                        previous_posts = pages[thread_page - 1]
+                        selected_idx = max(0, len(previous_posts) - 1)
                 elif cmd == "r":
-                    self._reply_to_thread()
+                    pages = self._invalidate_thread()
                 elif cmd == "h":
-                    self.current_page = 1
+                    if thread_page > 1:
+                        thread_page -= 1
+                        selected_idx = 0
                 elif cmd == "l":
-                    self.current_page = total_pages
+                    if thread_page < total_pages:
+                        thread_page += 1
+                        selected_idx = 0
                 elif cmd.isdigit():
                     # Jump to page
                     page = int(cmd)
                     if 1 <= page <= total_pages:
-                        self.current_page = page
+                        thread_page = page
+                        selected_idx = 0
 
             except ApiError as e:
                 self.ui.print_message(f"获取帖子内容失败: {e}", is_error=True)
-                break
+                return True
             except KeyboardInterrupt:
-                break
+                return True
+
+        return True
 
     def _reply_to_thread(self):
         """Reply to the current thread."""
