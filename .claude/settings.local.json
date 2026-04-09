@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__filesystem__directory_tree",
+      "Bash(npm list:*)",
+      "Bash(pip list:*)",
+      "Bash(brew list:*)",
+      "mcp__filesystem__search_files",
+      "mcp__filesystem__list_directory_with_sizes",
+      "mcp__filesystem__read_text_file",
+      "Bash(gh auth:*)",
+      "Bash(env)",
+      "Read(//home/gigo/.config/**)",
+      "Read(//home/gigo/**)",
+      "Bash(ls:*)",
+      "mcp__iflow-github__get_file_contents",
+      "mcp__iflow-github__list_commits",
+      "mcp__fetch-server__fetch_readable",
+      "mcp__iflow-github__search_code",
+      "Bash(python3:*)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(/home/gigo/arbeit/4d4y_cli/venv/bin/python:*)",
+      "Bash(git config:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m 'Initial commit: 4d4y CLI BBS-style forum client:*)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "filesystem",
+    "memory",
+    "sequential-thinking",
+    "github",
+    "brave-search",
+    "iflow-github",
+    "git-server",
+    "playwright",
+    "context7",
+    "ddg-search",
+    "fetch-server",
+    "omnisearch",
+    "sqlite-npx",
+    "restricted-github"
+  ]
+}

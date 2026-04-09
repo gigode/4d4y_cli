@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@ama-mcp/github@14.1.1"]
+    },
+    "iflow-github": {
+      "command": "npx",
+      "args": ["-y", "@iflow-mcp/server-github@0.6.2"]
+    }
+  }
+}
