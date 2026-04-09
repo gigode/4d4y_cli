@@ -7,6 +7,8 @@ A BBS-style terminal client for browsing 4d4y forum.
 
 import sys
 import getpass
+import tty
+import termios
 from pathlib import Path
 
 # Add package to path for development
@@ -15,6 +17,41 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from forzd4y.config import Config
 from forzd4y.api import ForumApi, ApiError
 from forzd4y.ui import TerminalUI, get_input
+
+
+def get_key():
+    """
+    Get a single keypress including arrow keys.
+    Returns:
+        'up', 'down', 'enter', or single character
+    """
+    try:
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            ch = sys.stdin.read(1)
+            if ch == '\x1b':  # Escape sequence
+                seq = sys.stdin.read(2)
+                if seq == '[A':
+                    return 'up'
+                elif seq == '[B':
+                    return 'down'
+                return 'escape'
+            elif ch == '\r':
+                return 'enter'
+            elif ch == 'q' or ch == 'Q':
+                return 'quit'
+            elif ch == 'j' or ch == 'J':
+                return 'down'  # Vim-style
+            elif ch == 'k' or ch == 'K':
+                return 'up'  # Vim-style
+            else:
+                return ch
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    except Exception:
+        return input() if hasattr(sys.stdin, 'readline') else 'escape'
 
 
 class BBSClient:
@@ -166,40 +203,62 @@ class BBSClient:
 
     def _enter_forum(self, fid):
         """
-        Enter a specific forum and browse threads.
+        Enter a specific forum and browse threads with cursor navigation.
 
         Args:
             fid: Forum ID
         """
         self.current_fid = fid
         self.current_page = 1
-        forum_name = self.api.get_forum_name(fid)
+        selected_idx = 0  # Currently selected thread index (0-based)
 
         while True:
             try:
                 threads, total_pages, _ = self.api.get_thread_list(fid, self.current_page)
-                self.ui.print_thread_list(threads, self.current_page, total_pages, fid)
 
-                cmd = get_input("  命令 [J/K翻页 Enter查看 R回复 B返回]: ").strip().lower()
-
-                if cmd == "b":
+                if not threads:
+                    self.ui.print_message("该板块暂无帖子")
                     break
-                elif cmd == "j" or cmd == "k":
-                    if cmd == "j" and self.current_page < total_pages:
-                        self.current_page += 1
-                    elif cmd == "k" and self.current_page > 1:
-                        self.current_page -= 1
-                elif cmd == "r":
-                    self.ui.print_message("请先选择要回复的帖子 (按 Enter 查看)")
-                    get_input()
-                elif cmd.isdigit():
-                    idx = int(cmd) - 1
-                    if 0 <= idx < len(threads):
-                        self._view_thread(threads[idx])
-                else:
-                    # Try Enter = view first thread
+
+                # Ensure selected_idx is valid
+                if selected_idx >= len(threads):
+                    selected_idx = len(threads) - 1
+                if selected_idx < 0:
+                    selected_idx = 0
+
+                # Display thread list with cursor
+                self.ui.print_thread_list(threads, self.current_page, total_pages, fid, selected_idx)
+
+                # Get key input
+                key = get_key()
+
+                if key == 'quit':
+                    break
+                elif key == 'b':
+                    break
+                elif key == 'up':
+                    # Move cursor up
+                    if selected_idx > 0:
+                        selected_idx -= 1
+                elif key == 'down':
+                    # Move cursor down
+                    if selected_idx < len(threads) - 1:
+                        selected_idx += 1
+                elif key == 'enter':
+                    # Open selected thread
                     if threads:
-                        self._view_thread(threads[0])
+                        self._view_thread(threads[selected_idx])
+                elif key == 'r' or key == 'R':
+                    if self.logged_in:
+                        self.ui.print_message("正在回复帖子...")
+                    else:
+                        self.ui.print_message("请先登录再回复")
+                elif key.isdigit():
+                    # Jump to specific thread number
+                    idx = int(key) - 1
+                    if 0 <= idx < len(threads):
+                        selected_idx = idx
+                        self._view_thread(threads[idx])
 
             except ApiError as e:
                 self.ui.print_message(f"获取帖子列表失败: {e}", is_error=True)

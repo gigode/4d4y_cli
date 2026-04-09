@@ -113,3 +113,4 @@ venv.bak/
 # Config with credentials (user should backup)
 # config.json
 # cookies.json
+.claude/

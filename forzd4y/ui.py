@@ -203,15 +203,16 @@ class TerminalUI:
         else:
             print(f"  {Colors.DIM}{self.HORIZONTAL * width}{Colors.RESET}")
 
-    def print_thread_list(self, threads: List[Dict], page: int = 1, total_pages: int = 1, fid: int = None):
+    def print_thread_list(self, threads: List[Dict], page: int = 1, total_pages: int = 1, fid: int = None, selected_idx: int = 0):
         """
-        Print BBS-style thread list.
+        Print BBS-style thread list with cursor.
 
         Args:
             threads: List of thread dictionaries
             page: Current page
             total_pages: Total pages
             fid: Forum ID for navigation
+            selected_idx: Currently selected thread index (0-based)
         """
         # Header
         print()
@@ -220,17 +221,17 @@ class TerminalUI:
         print(self.bold(f"{'─' * self.width}"))
 
         # Column headers
-        header = f"  {self.bold('序号')}".ljust(6)
+        header = f"  {self.bold(' ')}".ljust(4)
+        header += f"{self.bold('序号')}".ljust(5)
         header += f"{self.bold('标题')}".ljust(40)
         header += f"{self.bold('作者')}".ljust(12)
         header += f"{self.bold('回复/查看')}".ljust(14)
-        header += f"{self.bold('最后发表')}".ljust(12)
 
         print(self.cyan(header))
         print(self.dim("─" * self.width))
 
-        # Thread list
-        for idx, thread in enumerate(threads, 1):
+        # Thread list with cursor
+        for idx, thread in enumerate(threads):
             title = thread.get("title", "无标题")
             if len(title) > 38:
                 title = title[:35] + "..."
@@ -241,21 +242,25 @@ class TerminalUI:
 
             replies = thread.get("reply_count", 0)
             views = thread.get("view_count", 0)
-            last_post = thread.get("last_post", "")
 
-            row = f"  {idx:>3}.".ljust(6)
+            # Cursor indicator
+            if idx == selected_idx:
+                cursor = self.green("▶")
+            else:
+                cursor = " "
+
+            row = f"  {cursor} {idx+1:>3}.".ljust(10)
             row += self.bright_cyan(title).ljust(40)
             row += self.dim(author).ljust(12)
             row += f"{replies}/{views}".ljust(14)
-            row += self.dim(last_post[:10] if last_post else "").ljust(12)
 
             print(row)
 
         # Footer
         print(self.dim("─" * self.width))
-        page_info = f"第 {page}/{total_pages} 页"
-        nav_hint = "[J/K]上下 [Enter]查看 [R]回复 [B]返回 [Q]退出"
-        print(f"  {self.dim(page_info):<20} {self.dim(nav_hint):>{self.width - 24}}")
+        page_info = f"第 {page}/{total_pages} 页, 当前第 {selected_idx + 1} 条"
+        nav_hint = "[↑/↓]选择 [Enter]查看 [R]回复 [B]返回 [Q]退出"
+        print(f"  {self.dim(page_info):<30} {self.dim(nav_hint):>{self.width - 34}}")
         print()
 
     def print_post(self, post: Dict, thread_title: str = None, page: int = 1, total_pages: int = 1):
