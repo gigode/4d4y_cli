@@ -13,24 +13,23 @@
 
 ## 安装
 
-### 方式一: 通过 pip 安装
-
-```bash
-pip install 4d4y-cli
-```
-
-### 方式二: 源码安装
+### 源码安装
 
 ```bash
 # 克隆仓库
-git clone https://github.com/GreenSkinMonster/4d4y_cli.git
+git clone https://github.com/gigode/4d4y_cli.git
 cd 4d4y_cli
 
-# 安装依赖
-pip install -r requirements.txt
+# 创建虚拟环境（推荐）
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# venv\Scripts\activate  # Windows
 
-# 安装程序
-pip install -e .
+# 安装依赖
+pip install requests beautifulsoup4
+
+# 直接运行
+python -m forzd4y.cli
 ```
 
 ## 使用方法
@@ -38,13 +37,7 @@ pip install -e .
 ### 启动程序
 
 ```bash
-4d4y
-```
-
-或者直接运行源码:
-
-```bash
-python -m 4d4y_cli.cli
+python -m forzd4y.cli
 ```
 
 ### 界面操作
@@ -108,15 +101,15 @@ python -m 4d4y_cli.cli
 
 ```
 4d4y_cli/
-├── 4d4y_cli/          # 主程序包
-│   ├── __init__.py    # 包初始化
-│   ├── api.py         # 论坛 API 客户端
-│   ├── cli.py         # 命令行界面入口
-│   ├── config.py      # 配置管理
-│   └── ui.py          # 终端 UI 渲染
-├── requirements.txt   # Python 依赖
-├── setup.py           # 安装配置
-└── README.md          # 本文件
+├── forzd4y/            # 主程序包（Python模块名不能以数字开头）
+│   ├── __init__.py      # 包初始化
+│   ├── api.py           # 论坛 API 客户端
+│   ├── cli.py           # 命令行界面入口
+│   ├── config.py        # 配置管理
+│   └── ui.py           # 终端 UI 渲染
+├── requirements.txt     # Python 依赖
+├── setup.py            # 安装配置
+└── README.md           # 本文件
 ```
 
 ## 工作原理
