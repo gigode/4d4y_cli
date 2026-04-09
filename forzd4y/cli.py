@@ -23,13 +23,13 @@ def get_key():
     """
     Get a single keypress including arrow keys.
     Returns:
-        'up', 'down', 'enter', or single character
+        'up', 'down', 'enter', 'quit', or single character
     """
     try:
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
+        tty.setraw(fd)
         try:
-            tty.setraw(fd)
             ch = sys.stdin.read(1)
             if ch == '\x1b':  # Escape sequence
                 seq = sys.stdin.read(2)
@@ -43,15 +43,22 @@ def get_key():
             elif ch == 'q' or ch == 'Q':
                 return 'quit'
             elif ch == 'j' or ch == 'J':
-                return 'down'  # Vim-style
+                return 'down'
             elif ch == 'k' or ch == 'K':
-                return 'up'  # Vim-style
+                return 'up'
             else:
                 return ch
         finally:
+            # Always restore terminal settings
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    except OSError:
+        # Not a tty or other OS error - use fallback
+        try:
+            return input()
+        except EOFError:
+            return 'quit'  # Default to quit on EOF
     except Exception:
-        return input() if hasattr(sys.stdin, 'readline') else 'escape'
+        return 'escape'
 
 
 class BBSClient:
@@ -128,18 +135,18 @@ class BBSClient:
         print()
         print(self.ui.dim("─" * self.ui.width))
 
-        choice = get_input("  请选择: ").strip().lower()
+        key = get_key()
 
-        if choice == "q":
+        if key == 'quit':
             return False
-        elif choice == "l":
-            self._handle_login()
-        elif choice == "1":
+        elif key == '1':
             self._browse_forums()
-        elif choice == "2":
+        elif key == '2':
             self._enter_forum(2)  # Discovery fid
-        elif choice == "3":
+        elif key == '3':
             self._search_posts()
+        elif key == 'l' or key == 'L':
+            self._handle_login()
         else:
             self.ui.print_message("无效选择")
 

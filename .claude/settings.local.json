@@ -27,7 +27,9 @@
       "Bash(git commit -m 'Initial commit: 4d4y CLI BBS-style forum client:*)",
       "mcp__iflow-github__create_repository",
       "Bash(brew install:*)",
-      "Bash(gh repo:*)"
+      "Bash(gh repo:*)",
+      "Bash(git commit -m 'Fix quit functionality and terminal handling:*)",
+      "Bash(git push:*)"
     ]
   },
   "enabledMcpjsonServers": [
