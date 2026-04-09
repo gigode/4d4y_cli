@@ -495,7 +495,7 @@ class TerminalUI:
         print(self.bold(self._center_text("4D4Y Forum CLI 客户端", self.width)))
         print(self.bold(self._center_text("仿 BBS 风格的终端论坛浏览工具", self.width)))
         print()
-        print(self.dim(self._center_text(f"版本 1.0.0 | 访问 https://www.4d4y.com/forum/", self.width)))
+        print(self.dim(self._center_text(f"版本 1.0.1 | 访问 https://www.4d4y.com/forum/", self.width)))
         print()
         print(self.bold(f"{Colors.CYAN}{'#' * self.width}"))
         print()

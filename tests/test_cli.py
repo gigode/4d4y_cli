@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from forzd4y.cli import BBSClient
-from forzd4y.api import ForumApi
+from forzd4y.api import ApiError, ForumApi
 from forzd4y.config import Config
 
 
@@ -249,6 +249,19 @@ class BBSClientNavigationTests(unittest.TestCase):
         popen.assert_called_once()
         web_open.assert_not_called()
 
+    def test_handle_login_shows_error_and_keeps_logged_out_when_api_rejects_credentials(self):
+        client = self.make_client()
+
+        with patch.object(client.ui, "print_login"), \
+             patch("forzd4y.cli.get_input", side_effect=["tester", ""]), \
+             patch("forzd4y.cli.getpass.getpass", return_value="wrong-password"), \
+             patch.object(client.api, "login", side_effect=ApiError("登录失败：用户名或密码错误")), \
+             patch.object(client.ui, "print_message") as print_message:
+            client._handle_login()
+
+        self.assertFalse(client.logged_in)
+        print_message.assert_any_call("登录失败：用户名或密码错误", is_error=True)
+
 
 class ForumApiParsingTests(unittest.TestCase):
     def test_extract_thread_stats_from_single_num_cell(self):
@@ -296,6 +309,40 @@ class ForumApiParsingTests(unittest.TestCase):
         self.assertEqual(len(images), 2)
         self.assertEqual(images[0]["url"], "https://www.4d4y.com/forum/images/demo.jpg")
         self.assertEqual(images[1]["url"], "https://www.4d4y.com/forum/images/demo.jpeg")
+
+    def test_check_logged_in_does_not_treat_logged_out_homepage_as_logged_in(self):
+        with TemporaryDirectory() as temp_dir:
+            api = ForumApi(config=Config(config_dir=temp_dir))
+            html = """
+            <html>
+              <body>
+                <a href="space.php?uid=42">someone_else</a>
+                <a href="register.php">注册</a>
+                <a href="member.php?mod=logging&action=login">登录</a>
+              </body>
+            </html>
+            """
+
+            with patch.object(api, "get", return_value=html):
+                self.assertFalse(api._check_logged_in("tester"))
+
+    def test_login_raises_for_wrong_password_and_clears_login_state(self):
+        with TemporaryDirectory() as temp_dir:
+            config = Config(config_dir=temp_dir)
+            config.logged_in = True
+            config.uid = "123"
+            config.formhash = "deadbeef"
+            api = ForumApi(config=config)
+
+            with patch.object(api, "get_formhash", return_value="feedbeef"), \
+                 patch.object(api, "post", return_value="密码错误"), \
+                 patch.object(api, "_save_cookies"):
+                with self.assertRaisesRegex(ApiError, "用户名或密码错误"):
+                    api.login("tester", "wrong-password")
+
+            self.assertFalse(config.logged_in)
+            self.assertEqual(config.uid, "")
+            self.assertEqual(config.formhash, "")
 
 
 if __name__ == "__main__":
