@@ -29,7 +29,9 @@
       "Bash(brew install:*)",
       "Bash(gh repo:*)",
       "Bash(git commit -m 'Fix quit functionality and terminal handling:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote:*)"
     ]
   },
   "enabledMcpjsonServers": [

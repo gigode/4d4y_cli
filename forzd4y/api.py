@@ -523,7 +523,7 @@ class ForumApi:
         Extract post information from post container.
 
         Args:
-            container: BeautifulSoup element for post
+            container: BeautifulSoup element for post (div id="post_XXXXX")
 
         Returns:
             Dictionary with post info
@@ -533,47 +533,72 @@ class ForumApi:
             post_id_match = re.search(r"post_(\d+)", container.get("id", ""))
             pid = int(post_id_match.group(1)) if post_id_match else 0
 
-            # Extract author
-            author_elem = container.find("a", class_="nobname")
-            if not author_elem:
-                author_elem = container.find("span", class_="b")
-            author = author_elem.get_text(strip=True) if author_elem else "匿名"
-
-            # Extract author UID
+            # Extract author - look in td.postauthor
+            author_elem = container.find("td", class_="postauthor")
+            author = "匿名"
             uid = ""
-            if author_elem and author_elem.get("href"):
-                uid_match = re.search(r"uid=(\d+)", author_elem.get("href", ""))
-                if uid_match:
-                    uid = uid_match.group(1)
+            if author_elem:
+                # Try different author link selectors
+                author_link = author_elem.find("a", class_="nobname")
+                if not author_link:
+                    # Try link with margin-left style (4d4y forum specific)
+                    author_link = author_elem.find("a", style=lambda x: x and "margin-left" in str(x))
+                if not author_link:
+                    # Try first <a> in postauthor
+                    author_link = author_elem.find("a")
+                if author_link:
+                    author = author_link.get_text(strip=True)
+                    # Extract UID from href
+                    href = author_link.get("href", "")
+                    uid_match = re.search(r"uid=(\d+)", href)
+                    if uid_match:
+                        uid = uid_match.group(1)
 
-            # Extract post time
+            # Extract post time - look in td.postcontent for postinfo with "发表于"
             post_time = ""
-            time_elem = container.find("em", class_="lastpost")
-            if time_elem:
-                post_time = time_elem.get_text(strip=True)
-            else:
-                # Try to find in span or div
-                time_elem = container.find(["span", "div"], class_=re.compile(r"time|dateline"))
-                if time_elem:
-                    post_time = time_elem.get_text(strip=True)
+            postcontent = container.find("td", class_="postcontent")
+            if postcontent:
+                # Look for "发表于" text in postinfo div
+                postinfo = postcontent.find("div", class_="postinfo")
+                if postinfo:
+                    # Find em containing "发表于"
+                    for em in postinfo.find_all("em"):
+                        txt = em.get_text(strip=True)
+                        if "发表于" in txt:
+                            post_time = txt.replace("发表于", "").strip()
+                            break
+                # Fallback: check for posterinfo div
+                if not post_time:
+                    posterinfo = postcontent.find("div", class_="posterinfo")
+                    if posterinfo:
+                        txt = posterinfo.get_text(strip=True)
+                        if "发表于" in txt:
+                            post_time = txt.replace("发表于", "").strip()
 
-            # Extract post content
-            content_elem = container.find("div", class_="tpc_content")
-            if not content_elem:
-                content_elem = container.find("div", class_="pcbs")
-
+            # Extract post content - look in td.t_msgfont
             content = ""
+            content_elem = container.find("td", class_="t_msgfont")
             if content_elem:
-                # Get text content, preserving structure
                 content = self._clean_post_content(content_elem)
+
+            # Fallback: try td.postcontent for simple posts
+            if not content and postcontent:
+                # Skip navigation elements and get actual content
+                for child in postcontent.children:
+                    if hasattr(child, 'get_text'):
+                        txt = child.get_text(strip=True)
+                        if txt and "收藏" not in txt and "只看该作者" not in txt and "打印" not in txt:
+                            content = txt
+                            break
 
             # Extract floor number
             floor = 0
-            floor_elem = container.find("span", class_="floors")
-            if floor_elem:
-                floor_match = re.search(r"#(\d+)", floor_elem.get_text())
-                if floor_match:
-                    floor = int(floor_match.group(1))
+            if postcontent:
+                postnum = postcontent.find("a", id=re.compile(r"postnum\d+"))
+                if postnum:
+                    floor_match = re.search(r"(\d+)", postnum.get_text())
+                    if floor_match:
+                        floor = int(floor_match.group(1))
 
             return {
                 "pid": pid,

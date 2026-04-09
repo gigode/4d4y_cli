@@ -57,8 +57,7 @@ def get_key():
                     return ch
             finally:
                 termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        except Exception as e:
-            print(f"DEBUG get_key tty exception: {e}", file=sys.stderr)
+        except Exception:
             return 'escape'
     else:
         # Non-interactive (piped input) - use regular input with Enter
@@ -255,10 +254,6 @@ class BBSClient:
 
                 # Get key input
                 key = get_key()
-
-                # DEBUG: print key to stderr
-                import sys
-                print(f"DEBUG: key={repr(key)}", file=sys.stderr)
 
                 if key == 'quit':
                     break
