@@ -36,6 +36,13 @@ class ForumApi:
     # Login form field names
     LOGIN_SUCCESS_MARKER = "欢迎您"
     LOGIN_FAIL_MARKER = "密码错误"
+    LOGIN_STATE_MARKERS = (
+        "action=logout",
+        "欢迎您回来",
+        "欢迎您，",
+        "欢迎您,",
+        "discuz_uid",
+    )
 
     def __init__(self, config=None):
         """
@@ -200,15 +207,17 @@ class ForumApi:
 
             return True
         elif self.LOGIN_FAIL_MARKER in response:
+            self._clear_login_state()
             raise ApiError("登录失败：用户名或密码错误")
         else:
             # Check if already logged in by looking for user info
-            if self._check_logged_in():
+            if self._check_logged_in(username):
                 self.config.logged_in = True
                 self.config.username = username
                 self.config.save_config()
                 self._save_cookies()
                 return True
+            self._clear_login_state()
             raise ApiError("登录失败：未知错误")
 
     def _process_password(self, password):
@@ -230,7 +239,14 @@ class ForumApi:
         escaped = password.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
         return hashlib.md5(escaped.encode('utf-8')).hexdigest()
 
-    def _check_logged_in(self):
+    def _clear_login_state(self):
+        """Clear persisted login state when authentication is not valid."""
+        self.config.logged_in = False
+        self.config.uid = ""
+        self.config.formhash = ""
+        self.config.save_config()
+
+    def _check_logged_in(self, username=None):
         """
         Check if current session is logged in.
 
@@ -240,7 +256,10 @@ class ForumApi:
         try:
             # Try to fetch home page and check for user menu
             html = self.get(self.config.BASE_URL + "index.php")
-            return "space.php" in html or "logging.php" not in html
+            expected_username = username or self.config.username
+            if expected_username and expected_username in html:
+                return True
+            return any(marker in html for marker in self.LOGIN_STATE_MARKERS)
         except:
             return False
 

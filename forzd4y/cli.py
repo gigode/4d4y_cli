@@ -353,9 +353,9 @@ class BBSClient:
                 return
 
             try:
-                self.api.login(username, password)
-                self.logged_in = True
-                self.ui.print_message(f"登录成功! 欢迎, {username}!")
+                if self.api.login(username, password):
+                    self.logged_in = True
+                    self.ui.print_message(f"登录成功! 欢迎, {username}!")
             except ApiError as e:
                 self.ui.print_message(str(e), is_error=True)
             except Exception as e:
