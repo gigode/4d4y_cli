@@ -25,6 +25,7 @@ def get_key():
     Returns:
         'up', 'down', 'enter', 'quit', or single character
     """
+    import sys
     # Check if stdin is a tty (interactive terminal)
     if sys.stdin.isatty():
         try:
@@ -42,25 +43,33 @@ def get_key():
                     return 'escape'
                 elif ch == '\r':
                     return 'enter'
+                elif ch == '\n':
+                    return 'enter'
                 elif ch == 'q' or ch == 'Q':
                     return 'quit'
                 elif ch == 'j' or ch == 'J':
                     return 'down'
                 elif ch == 'k' or ch == 'K':
                     return 'up'
+                elif ch == 'b' or ch == 'B':
+                    return 'b'
                 else:
                     return ch
             finally:
                 termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        except Exception:
+        except Exception as e:
+            print(f"DEBUG get_key tty exception: {e}", file=sys.stderr)
             return 'escape'
     else:
         # Non-interactive (piped input) - use regular input with Enter
-        result = input()
-        result = result.strip().lower()
-        if result == 'q':
+        try:
+            result = input()
+            result = result.strip().lower()
+            if result == 'q':
+                return 'quit'
+            return result
+        except EOFError:
             return 'quit'
-        return result
 
 
 class BBSClient:
@@ -246,6 +255,10 @@ class BBSClient:
 
                 # Get key input
                 key = get_key()
+
+                # DEBUG: print key to stderr
+                import sys
+                print(f"DEBUG: key={repr(key)}", file=sys.stderr)
 
                 if key == 'quit':
                     break
