@@ -25,40 +25,42 @@ def get_key():
     Returns:
         'up', 'down', 'enter', 'quit', or single character
     """
-    try:
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-        tty.setraw(fd)
+    # Check if stdin is a tty (interactive terminal)
+    if sys.stdin.isatty():
         try:
-            ch = sys.stdin.read(1)
-            if ch == '\x1b':  # Escape sequence
-                seq = sys.stdin.read(2)
-                if seq == '[A':
-                    return 'up'
-                elif seq == '[B':
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            tty.setraw(fd)
+            try:
+                ch = sys.stdin.read(1)
+                if ch == '\x1b':  # Escape sequence
+                    seq = sys.stdin.read(2)
+                    if seq == '[A':
+                        return 'up'
+                    elif seq == '[B':
+                        return 'down'
+                    return 'escape'
+                elif ch == '\r':
+                    return 'enter'
+                elif ch == 'q' or ch == 'Q':
+                    return 'quit'
+                elif ch == 'j' or ch == 'J':
                     return 'down'
-                return 'escape'
-            elif ch == '\r':
-                return 'enter'
-            elif ch == 'q' or ch == 'Q':
-                return 'quit'
-            elif ch == 'j' or ch == 'J':
-                return 'down'
-            elif ch == 'k' or ch == 'K':
-                return 'up'
-            else:
-                return ch
-        finally:
-            # Always restore terminal settings
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-    except OSError:
-        # Not a tty or other OS error - use fallback
-        try:
-            return input()
-        except EOFError:
-            return 'quit'  # Default to quit on EOF
-    except Exception:
-        return 'escape'
+                elif ch == 'k' or ch == 'K':
+                    return 'up'
+                else:
+                    return ch
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        except Exception:
+            return 'escape'
+    else:
+        # Non-interactive (piped input) - use regular input with Enter
+        result = input()
+        result = result.strip().lower()
+        if result == 'q':
+            return 'quit'
+        return result
 
 
 class BBSClient:
@@ -135,9 +137,15 @@ class BBSClient:
         print()
         print(self.ui.dim("─" * self.ui.width))
 
+        # Show hint based on terminal mode
+        if sys.stdin.isatty():
+            print(self.ui.dim("  按键选择: "))
+        else:
+            print(self.ui.dim("  输入选择后按回车: "))
+
         key = get_key()
 
-        if key == 'quit':
+        if key in ('quit', 'q', 'Q'):
             return False
         elif key == '1':
             self._browse_forums()
@@ -145,7 +153,7 @@ class BBSClient:
             self._enter_forum(2)  # Discovery fid
         elif key == '3':
             self._search_posts()
-        elif key == 'l' or key == 'L':
+        elif key in ('l', 'L'):
             self._handle_login()
         else:
             self.ui.print_message("无效选择")

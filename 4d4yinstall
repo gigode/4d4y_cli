@@ -1,0 +1,83 @@
+#!/bin/bash
+# 4d4y CLI 安装脚本
+# 用法: ./4d4yinstall
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="$HOME/.local/bin"
+VENV_DIR="$SCRIPT_DIR/venv"
+
+echo "======================================"
+echo "  4D4Y Forum CLI 安装程序"
+echo "======================================"
+echo
+
+# 创建安装目录
+mkdir -p "$INSTALL_DIR"
+
+# 检查 Python3
+if ! command -v python3 &> /dev/null; then
+    echo "错误: 未找到 python3，请先安装 Python 3.7+"
+    exit 1
+fi
+echo "[OK] Python3 已找到"
+
+# 创建虚拟环境
+if [ ! -d "$VENV_DIR" ]; then
+    echo "正在创建虚拟环境..."
+    python3 -m venv "$VENV_DIR"
+    echo "[OK] 虚拟环境已创建"
+else
+    echo "[OK] 虚拟环境已存在"
+fi
+
+# 安装依赖
+echo "正在安装依赖..."
+source "$VENV_DIR/bin/activate"
+pip install --upgrade pip -q
+pip install requests beautifulsoup4 -q
+echo "[OK] 依赖已安装"
+
+# 创建运行脚本
+echo "正在创建快捷命令..."
+# 获取项目的绝对路径
+PROJECT_PATH="$(cd "$SCRIPT_DIR" && pwd)"
+cat > "$INSTALL_DIR/4d4y" << EOF
+#!/bin/bash
+# 4D4Y Forum CLI 启动脚本
+PROJECT_DIR="$PROJECT_PATH"
+if [ -d "\$PROJECT_DIR/venv" ]; then
+    source "\$PROJECT_DIR/venv/bin/activate"
+    cd "\$PROJECT_DIR"
+    python -m forzd4y.cli "\$@"
+else
+    echo "错误: 未找到 4d4y_cli，请先运行 4d4yinstall"
+    exit 1
+fi
+EOF
+
+chmod +x "$INSTALL_DIR/4d4y"
+echo "[OK] 4d4y 命令已创建"
+
+# 验证安装
+if [ -f "$INSTALL_DIR/4d4y" ]; then
+    echo
+    echo "======================================"
+    echo "  安装成功!"
+    echo "======================================"
+    echo
+    echo "请将以下目录加入 PATH (如果还没有):"
+    echo "  $INSTALL_DIR"
+    echo
+    echo "方法一 - 临时生效 (当前终端):"
+    echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    echo
+    echo "方法二 - 永久生效 (添加到 ~/.bashrc):"
+    echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
+    echo
+    echo "然后运行: 4d4y"
+else
+    echo "错误: 安装失败"
+    exit 1
+fi

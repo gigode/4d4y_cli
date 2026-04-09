@@ -1,0 +1,15 @@
+#!/bin/bash
+# 4D4Y Forum CLI 启动脚本
+# 用法: ./4d4y
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_DIR="$SCRIPT_DIR/venv"
+
+if [ ! -d "$VENV_DIR" ]; then
+    echo "错误: 未找到虚拟环境，请先运行 ./4d4yinstall"
+    exit 1
+fi
+
+source "$VENV_DIR/bin/activate"
+cd "$SCRIPT_DIR"
+python -m forzd4y.cli "$@"

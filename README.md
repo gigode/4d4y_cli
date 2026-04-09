@@ -11,24 +11,31 @@ git clone https://github.com/gigode/4d4y_cli.git
 cd 4d4y_cli
 ```
 
-### 2. 安装依赖
+### 2. 一键安装
 
 ```bash
-# 创建虚拟环境（推荐）
-python3 -m venv venv
+./4d4yinstall
+```
 
-# 激活虚拟环境
-source venv/bin/activate      # Linux/Mac
-venv\Scripts\activate         # Windows
+安装程序会自动：
+- 创建 Python 虚拟环境
+- 安装依赖 (requests, beautifulsoup4)
+- 创建 `4d4y` 快捷命令
 
-# 安装依赖
-pip install requests beautifulsoup4
+安装完成后，请确保 `~/.local/bin` 在你的 PATH 中：
+```bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ### 3. 运行程序
 
 ```bash
-python -m forzd4y.cli
+./4d4y
+```
+
+或如果已将 `~/.local/bin` 加入 PATH：
+```bash
+4d4y
 ```
 
 ---
