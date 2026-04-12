@@ -231,11 +231,27 @@ class BBSClientNavigationTests(unittest.TestCase):
 
         with patch.object(client.api, "get_thread_detail", return_value=(post_with_image, 1, 1, "topic")), \
              patch.object(client.ui, "print_thread_posts"), \
-             patch.object(client, "_read_command", side_effect=["j", "enter", "q"]), \
+             patch.object(client, "_read_command", side_effect=["k", "enter", "q"]), \
              patch.object(client, "_open_url", return_value=True) as open_browser:
             client._view_thread({"tid": 1, "title": "topic"})
 
         open_browser.assert_called_once_with("https://img.example/test.jpg")
+
+    def test_thread_view_enter_on_reply_link_opens_browser(self):
+        client = self.make_client()
+        post_with_link = [{
+            "floor": 1,
+            "content": "hello",
+            "links": [{"url": "https://example.com/post/1", "text": "原帖链接"}],
+        }]
+
+        with patch.object(client.api, "get_thread_detail", return_value=(post_with_link, 1, 1, "topic")), \
+             patch.object(client.ui, "print_thread_posts"), \
+             patch.object(client, "_read_command", side_effect=["k", "enter", "q"]), \
+             patch.object(client, "_open_url", return_value=True) as open_browser:
+            client._view_thread({"tid": 1, "title": "topic"})
+
+        open_browser.assert_called_once_with("https://example.com/post/1")
 
     def test_open_url_uses_quiet_xdg_open_when_available(self):
         client = self.make_client()
@@ -309,6 +325,27 @@ class ForumApiParsingTests(unittest.TestCase):
         self.assertEqual(len(images), 2)
         self.assertEqual(images[0]["url"], "https://www.4d4y.com/forum/images/demo.jpg")
         self.assertEqual(images[1]["url"], "https://www.4d4y.com/forum/images/demo.jpeg")
+
+    def test_extract_post_links_skips_image_and_javascript_links(self):
+        with TemporaryDirectory() as temp_dir:
+            api = ForumApi(config=Config(config_dir=temp_dir))
+            html = """
+            <td class="t_msgfont">
+              <a href="https://example.com/article">外部链接</a>
+              <a href="viewthread.php?tid=123">站内帖子</a>
+              <a href="images/demo.jpg">图片链接</a>
+              <a href="javascript:void(0)">无效</a>
+            </td>
+            """
+            from bs4 import BeautifulSoup
+            elem = BeautifulSoup(html, "html.parser").find("td")
+
+            links = api._extract_post_links(elem)
+
+        self.assertEqual(len(links), 2)
+        self.assertEqual(links[0]["url"], "https://example.com/article")
+        self.assertEqual(links[0]["text"], "外部链接")
+        self.assertEqual(links[1]["url"], "https://www.4d4y.com/forum/viewthread.php?tid=123")
 
     def test_check_logged_in_does_not_treat_logged_out_homepage_as_logged_in(self):
         with TemporaryDirectory() as temp_dir:

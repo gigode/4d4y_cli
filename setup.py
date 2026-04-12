@@ -15,7 +15,7 @@ if readme_file.exists():
 
 setup(
     name="4d4y_cli",
-    version="1.0.1",
+    version="1.0.2",
     author="4d4y_cli contributors",
     author_email="",
     description="A BBS-style CLI client for 4d4y forum",

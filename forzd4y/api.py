@@ -618,6 +618,7 @@ class ForumApi:
             content_elem = container.find("td", class_="t_msgfont")
             if content_elem:
                 images = self._extract_post_images(content_elem)
+                links = self._extract_post_links(content_elem)
                 content = self._clean_post_content(content_elem)
 
             # Fallback: try td.postcontent for simple posts
@@ -645,6 +646,7 @@ class ForumApi:
                 "uid": uid,
                 "content": content,
                 "images": images,
+                "links": links,
                 "post_time": post_time,
                 "floor": floor,
             }
@@ -673,6 +675,31 @@ class ForumApi:
             })
 
         return images
+
+    def _extract_post_links(self, elem):
+        """Extract non-image hyperlinks from a post content block."""
+        links = []
+        seen = set()
+
+        for anchor in elem.find_all("a", href=True):
+            href = (anchor.get("href") or "").strip()
+            if not href or href.startswith(("#", "javascript:", "mailto:")):
+                continue
+
+            link_url = urljoin(self.config.BASE_URL, href)
+            link_path = urlparse(link_url).path.lower()
+            if link_path.endswith((".jpg", ".jpeg")):
+                continue
+            if link_url in seen:
+                continue
+
+            seen.add(link_url)
+            links.append({
+                "url": link_url,
+                "text": anchor.get_text(" ", strip=True) or link_url,
+            })
+
+        return links
 
     def _clean_post_content(self, elem):
         """

@@ -55,9 +55,9 @@ def get_key():
                 elif ch == 'q' or ch == 'Q':
                     return 'quit'
                 elif ch == 'j' or ch == 'J':
-                    return 'down'
-                elif ch == 'k' or ch == 'K':
                     return 'up'
+                elif ch == 'k' or ch == 'K':
+                    return 'down'
                 elif ch == 'b' or ch == 'B':
                     return 'b'
                 else:
@@ -213,6 +213,21 @@ class BBSClient:
                     "floor": post.get("floor"),
                     "image_url": image.get("url"),
                     "image_label": image.get("alt") or f"图片 {image_index}",
+                })
+                current_rendered_lines += 2
+
+            for link_index, link in enumerate(post.get("links", []), start=1):
+                if current_rendered_lines + 2 > max_rendered_lines:
+                    pages.append(current_page)
+                    current_page = []
+                    current_content_lines = 0
+                    current_rendered_lines = 0
+
+                current_page.append({
+                    "type": "link",
+                    "floor": post.get("floor"),
+                    "link_url": link.get("url"),
+                    "link_label": link.get("text") or f"链接 {link_index}",
                 })
                 current_rendered_lines += 2
 
@@ -436,8 +451,8 @@ class BBSClient:
                 self.ui.print_thread_list(threads, forum_page, total_pages, fid, selected_idx)
 
                 key = self._read_command(
-                    "  命令 [J/K/↑/↓选择 H/L翻页 Enter查看 数字+Enter直达 R刷新 B返回 Q退出]: ",
-                    direct_keys={"b", "q", "r", "h", "l", "up", "down"},
+                    "  命令 [J上/K下/↑/↓选择 H/L翻页 Enter查看 数字+Enter直达 R刷新 B返回 Q退出]: ",
+                    direct_keys={"j", "k", "b", "q", "r", "h", "l", "up", "down"},
                     allow_digits=True,
                 )
 
@@ -445,14 +460,14 @@ class BBSClient:
                     return False
                 elif key == 'b':
                     return True
-                elif key == 'up':
+                elif key in {'j', 'up'}:
                     # Move cursor up
                     if selected_idx > 0:
                         selected_idx -= 1
                     elif forum_page > 1:
                         forum_page -= 1
                         selected_idx = self.THREADS_PER_PAGE - 1
-                elif key == 'down':
+                elif key in {'k', 'down'}:
                     # Move cursor down
                     if selected_idx < len(threads) - 1:
                         selected_idx += 1
@@ -535,7 +550,7 @@ class BBSClient:
                 )
 
                 cmd = self._read_command(
-                    "  命令 [J/K/↑/↓选择 H/L翻页 R刷新 B返回 Q退出 数字+Enter跳页]: ",
+                    "  命令 [J上/K下/↑/↓选择 H/L翻页 R刷新 B返回 Q退出 数字+Enter跳页]: ",
                     direct_keys={"j", "k", "r", "b", "q", "h", "l", "up", "down"},
                     allow_digits=True,
                 )
@@ -546,27 +561,28 @@ class BBSClient:
                     return True
                 elif cmd == "enter":
                     selected_item = posts[selected_idx] if posts else None
-                    if selected_item and selected_item.get("type") == "image":
+                    if selected_item and selected_item.get("type") in {"image", "link"}:
+                        url = selected_item.get("image_url") or selected_item.get("link_url")
                         try:
-                            opened = self._open_url(selected_item.get("image_url"))
+                            opened = self._open_url(url)
                             if not opened:
                                 raise RuntimeError("系统未返回可用浏览器")
                         except Exception as exc:
                             self.ui.print_message(f"打开浏览器失败: {exc}", is_error=True)
                             get_input("  按 Enter 继续...")
-                elif cmd in {"j", "down"}:
-                    if selected_idx < len(posts) - 1:
-                        selected_idx += 1
-                    elif thread_page < total_pages:
-                        thread_page += 1
-                        selected_idx = 0
-                elif cmd in {"k", "up"}:
+                elif cmd in {"j", "up"}:
                     if selected_idx > 0:
                         selected_idx -= 1
                     elif thread_page > 1:
                         thread_page -= 1
                         previous_posts = pages[thread_page - 1]
                         selected_idx = max(0, len(previous_posts) - 1)
+                elif cmd in {"k", "down"}:
+                    if selected_idx < len(posts) - 1:
+                        selected_idx += 1
+                    elif thread_page < total_pages:
+                        thread_page += 1
+                        selected_idx = 0
                 elif cmd == "r":
                     pages = self._invalidate_thread()
                 elif cmd == "h":

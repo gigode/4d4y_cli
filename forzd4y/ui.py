@@ -266,7 +266,7 @@ class TerminalUI:
         # Footer
         print(self.dim("─" * self.width))
         page_info = f"第 {page}/{total_pages} 页, 当前第 {selected_idx + 1} 条"
-        nav_hint = "[J/K/↑/↓]选择 [H/L]翻页 [Enter]查看 [数字+Enter]直达 [R]刷新 [B]返回 [Q]退出"
+        nav_hint = "[J上/K下/↑/↓]选择 [H/L]翻页 [Enter]查看 [数字+Enter]直达 [R]刷新 [B]返回 [Q]退出"
         print(f"  {self.dim(page_info):<30} {self.dim(nav_hint):>{self.width - 34}}")
         print()
 
@@ -317,7 +317,7 @@ class TerminalUI:
         print(self.dim("─" * self.width))
 
         page_info = f"第 {page}/{total_pages} 页"
-        nav_hint = "[J/K]上下 [R]回复 [Q]返回"
+        nav_hint = "[J上/K下]移动 [R]回复 [Q]返回"
         print(f"  {self.dim(page_info):<20} {self.dim(nav_hint):>{self.width - 24}}")
         print()
 
@@ -346,6 +346,15 @@ class TerminalUI:
                 preview = image_url if len(image_url) <= self.width - 12 else image_url[:self.width - 15] + "..."
                 print()
                 print(self.yellow(f"{pointer}[图] {image_label}"))
+                print(f"  {self.dim('│')} {self.cyan(preview)}")
+                continue
+
+            if post.get("type") == "link":
+                link_url = post.get("link_url", "")
+                link_label = post.get("link_label", "链接")
+                preview = link_url if len(link_url) <= self.width - 12 else link_url[:self.width - 15] + "..."
+                print()
+                print(self.yellow(f"{pointer}[链] {link_label}"))
                 print(f"  {self.dim('│')} {self.cyan(preview)}")
                 continue
 
@@ -380,7 +389,7 @@ class TerminalUI:
 
         print()
         page_info = f"第 {page}/{total_pages} 页"
-        nav_hint = "[J/K/↑/↓]选择 [Enter]打开图片 [H/L]翻页 [数字+Enter]跳页 [R]刷新 [B]返回 [Q]退出"
+        nav_hint = "[J上/K下/↑/↓]选择 [Enter]打开链接/图片 [H/L]翻页 [数字+Enter]跳页 [R]刷新 [B]返回 [Q]退出"
         print(f"  {self.dim(page_info):<20} {self.dim(nav_hint):>{self.width - 24}}")
         print()
 
@@ -495,7 +504,7 @@ class TerminalUI:
         print(self.bold(self._center_text("4D4Y Forum CLI 客户端", self.width)))
         print(self.bold(self._center_text("仿 BBS 风格的终端论坛浏览工具", self.width)))
         print()
-        print(self.dim(self._center_text(f"版本 1.0.1 | 访问 https://www.4d4y.com/forum/", self.width)))
+        print(self.dim(self._center_text(f"版本 1.0.2 | 访问 https://www.4d4y.com/forum/", self.width)))
         print()
         print(self.bold(f"{Colors.CYAN}{'#' * self.width}"))
         print()
@@ -550,10 +559,10 @@ class InteractiveSelector:
 
             if key == "q":
                 return None
-            elif key == "j" or key == "down":
-                self._move_down()
-            elif key == "k" or key == "up":
+            elif key == "j" or key == "up":
                 self._move_up()
+            elif key == "k" or key == "down":
+                self._move_down()
             elif key == "enter":
                 if 0 <= self.selected_index < len(self.items):
                     item = self.items[self.selected_index]
@@ -593,7 +602,7 @@ class InteractiveSelector:
         # Footer
         print()
         print(self.ui.dim("─" * self.ui.width))
-        nav = "[J/K]选择 [Enter]确认 [Q]返回"
+        nav = "[J上/K下]选择 [Enter]确认 [Q]返回"
         print(f"  {self.ui.dim(nav)}")
 
     def _format_item(self, item) -> str:
